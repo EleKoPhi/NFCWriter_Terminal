@@ -58,7 +58,7 @@ def WriteCredit(number):
             Serial.flushInput()
             Serial.write(number.encode())
             res_write = Serial.readline().decode().replace("\n", "").replace("\r", "")
-            print("Wrote " + str(res_write) + " to card")
+            #print("Wrote " + str(res_write) + " to card")
             return res_write
     else:
         Serial.flushOutput()
@@ -76,14 +76,18 @@ def reset_card():
     Serial.flushInput()
     Serial.write(b'Reset')
     _ans = Serial.readline().decode().replace("\n", "").replace("\r", "")
+    print(_ans)
     if 'Reset' in _ans:
         Ans = Serial.readline().decode().replace("\n", "").replace("\r", "")
         if 'Reset' in Ans: print("Trying to reset the chip!")
         State = Serial.readline().decode().replace("\n", "").replace("\r", "")
+        print(State)
         if 'Err' in State:
             print("Reset Failed !")
             return -1
 
+        Serial.flushOutput()
+        Serial.flushInput()
         return 1
     else:
         Serial.flushOutput()
@@ -115,13 +119,15 @@ print("Karte auflegen")
 
 while True:
     Serial.flushInput()
-    state = IsNewCardPresent()
     Serial.flushOutput()
+
+    state = IsNewCardPresent()
+
 
     if state == (" " or "" or not "1"): continue
 
     if state == 'Unknown cmd':
-        print("Err in serial connection - retry")
+        #print("Err in serial connection - retry")
         flush_serial()
         continue
 
@@ -141,12 +147,15 @@ while True:
                 if reset_card() is not 1:
                     print("Let's try again...")
                     continue
+                else:
+                    print("Passed - Let's try again")
+                    continue
             else:
                 continue
 
         while True:
 
-            mode = input('1 - 30ct, 2 - 50ct, 3 - Service: ')
+            mode = input('1 - 30ct, 2 - 50ct, Setup new card - 3, 4 - Service: ')
 
             if mode == "1":
                 money = float(input("Money: "))
@@ -159,6 +168,18 @@ while True:
                 break
 
             elif mode == "3":
+                if int(current_credit) is not 0:
+                    print("There is some credit?")
+                    print("Reset and write 0 to crad?")
+                    select = str(input("YES - 1, NO - 2"))
+                if select == "2":
+                    credit = int(money / 0.50 + int(current_credit))
+                else:
+                    credit = 0
+
+                break
+
+            elif mode == "4":
                 credit = int(input("Service Credit: "))
                 break
 
@@ -167,6 +188,19 @@ while True:
                 continue
 
         flush_serial()
+
+        Count = 0
+
+        if select == "1":
+            while reset_card() is not 1:
+                flush_serial()
+                Count+=1
+                if Count > 10:
+                    print("Could not reset card :(")
+                    break
+        
+        flush_serial()
+
         print("Write " + str(credit) + " to card")
         write_state = WriteCredit(str(credit))
 
@@ -183,10 +217,6 @@ while True:
             flush_serial()
             if (i > 5):
                 break
-
-        if i > 15:
-            print("Something went wrong - Add card again")
-            continue
 
         flush_serial()
 
