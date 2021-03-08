@@ -99,6 +99,8 @@ def read_default():
     Serial.readline().decode()
     print("Clear input and output buffer")
 
+credit = 0
+
 
 print("K20 - Terminal\n")
 
@@ -111,23 +113,24 @@ for port in ports:
 
 Count = int(input("\nChoose: "))
 
-print("connect to: " + ports[Count].device)
+print("connect to: " + ports[Count].device + "\n")
 Serial = serial.Serial(ports[Count].device)
 read_default()
 
-print("Karte auflegen")
+print("## Please place chip on reader ##")
 
 while True:
+
     Serial.flushInput()
     Serial.flushOutput()
-
     state = IsNewCardPresent()
+    credit = 0
 
-
-    if state == (" " or "" or not "1"): continue
+    if state == (" " or "" or not "1"):
+        continue
 
     if state == 'Unknown cmd':
-        #print("Err in serial connection - retry")
+        print("Unkown serial answer - Reset loop")
         flush_serial()
         continue
 
@@ -136,26 +139,27 @@ while True:
         User_ID = getId()
         current_credit = ReadCredit()
 
+        print("------------------------")
         print("ID:     " + str(User_ID))
         print("Credit: " + str(current_credit))
-        print("")
+        print("------------------------")
 
         if str(current_credit) == "-1":
             print("Card not initialized !")
-            ini = int(input("Initialize(0) // Try again(1): "))
-            if ini is not 1:
-                if reset_card() is not 1:
-                    print("Let's try again...")
+            ini = int(input("Initialize [0] // Try again [1]: "))
+            if ini != 1:
+                if reset_card() != 1:
+                    print("## Could not reset placed chip ##")
                     continue
                 else:
-                    print("Passed - Let's try again")
+                    print("## Chip reset successful ##")
                     continue
             else:
                 continue
 
         while True:
 
-            mode = input('1 - 30ct, 2 - 50ct, Setup new card - 3, 4 - Service: ')
+            mode = input('1 - 30ct\n2 - 50ct\n3 - Setup new chip\n4 - Service\nSelect: ')
 
             if mode == "1":
                 money = float(input("Money: "))
@@ -168,15 +172,19 @@ while True:
                 break
 
             elif mode == "3":
-                if int(current_credit) is not 0:
-                    print("There is some credit?")
-                    print("Reset and write 0 to crad?")
-                    select = str(input("YES - 1, NO - 2"))
-                if select == "2":
-                    credit = int(money / 0.50 + int(current_credit))
+                select = "Y"
+                if int(current_credit) != 0:
+                    print("Credit found on chip!")
+                    print("Reset and write 0 to card?")
+                    select = str(input("[Y]es [N]o :"))
+                if select.upper() == "Y":
+                    print("## Reset card ##")
+                    while reset_card() != 1:
+                        flush_serial()
+                        print("Trying to reset you chip !")
+                        continue
                 else:
                     credit = 0
-
                 break
 
             elif mode == "4":
@@ -184,24 +192,13 @@ while True:
                 break
 
             else:
-                print("Err - Try again")
+                print("## Err - Try again ##")
                 continue
 
         flush_serial()
 
-        Count = 0
-
-        if select == "1":
-            while reset_card() is not 1:
-                flush_serial()
-                Count+=1
-                if Count > 10:
-                    print("Could not reset card :(")
-                    break
-        
-        flush_serial()
-
         print("Write " + str(credit) + " to card")
+
         write_state = WriteCredit(str(credit))
 
         flush_serial()
@@ -222,7 +219,8 @@ while True:
 
         print("Read new credit: " + ReadCredit())
 
-        if input("Add more? [y][n]") == "y":
+        if input("Add more? [Y]es [N]o: ").upper() == "Y":
+            print("## Please place chip on reader ##")
             continue
         else:
             break

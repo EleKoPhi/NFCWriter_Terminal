@@ -2,8 +2,8 @@
 #include <MFRC522.h>
 
 #define SS_PIN          D2         
-#define RST_PIN         D1      
-#define YOUR_PAGE       0x4
+#define RST_PIN         D4      
+#define YOUR_PAGE       0x5
 
 MFRC522 mfrc522(SS_PIN, RST_PIN); 
 
@@ -19,7 +19,11 @@ int ReadCredit()
   byte byteCount;
   byteCount = sizeof(buffer);
   int res = mfrc522.MIFARE_Read(Page, buffer, &byteCount);
-  if (res != 0)
+  //Serial.println(buffer[0]);
+  //Serial.println(buffer[1]);
+  //Serial.println(buffer[2]);
+  //Serial.println(buffer[3]);
+  if (res != 0 || ((buffer[0]+buffer[1]+buffer[2]+buffer[3])/4) != (buffer[0] & buffer[1] & buffer[2] & buffer[3]))
   {
     return -1;
   }
@@ -45,7 +49,7 @@ int WriteCredit(int newCredit_lokal)
   byte WBuff[] = {newCredit_lokal, newCredit_lokal, newCredit_lokal, newCredit_lokal};
   mfrc522.PCD_NTAG216_AUTH(&PSWBuff[0], pACK);
   mfrc522.MIFARE_Ultralight_Write(Page, WBuff, 4); 
-  Serial.println(newCredit_lokal);
+  //Serial.println(newCredit_lokal);
   return 1;
 }
 
@@ -60,7 +64,7 @@ void setup()
 void loop()
 {
 
-  String cmd = Serial.readString();
+  String cmd =  Serial.readString();
   Serial.println("Received: " + cmd);
 
   if (cmd == "IsNewCardPresent")
@@ -83,25 +87,26 @@ void loop()
   }
   else if (cmd == "Reset")
   {
-    while (true)
-    {
+    while(!mfrc522.PICC_IsNewCardPresent()){}
       mfrc522.PICC_ReadCardSerial();
       ReadCredit();
       Serial.println("Reset");
-      WriteCredit(0);
+      
 
       int flag = 0;
 
       flag = mfrc522.MIFARE_Ultralight_Write(0xE5, PSWBuff, 4);
       mfrc522.MIFARE_Ultralight_Write(0xE6, pACK, 4);
       mfrc522.MIFARE_Ultralight_Write(0xE3, WBuff, 4);
+
+      WriteCredit(0);
+
       ReadCredit();
 
       if (flag == 3)
       {
         delay(2000);
         Serial.println("Err");
-        break;
       }
 
       bool flagNow = true;
@@ -113,10 +118,10 @@ void loop()
         flagNow = mfrc522.PICC_IsNewCardPresent();
         if (flagNow == flagPast)
           break;
+        
+        WriteCredit(0);
         Serial.println("Done!");
       }
-      break;
-    }
   }
   else
   {
