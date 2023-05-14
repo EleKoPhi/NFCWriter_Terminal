@@ -74,6 +74,7 @@ byte WriteCredit(int newCredit_lokal, uint8 chipPage)
   return mfrc522.MIFARE_Ultralight_Write(chipPage, WBuff, 4);
 }
 
+bool secondInit = true;
 void loop()
 {
 
@@ -84,6 +85,13 @@ void loop()
     Serial.println("pong");
 
     cmd = Serial.readString();
+
+    if (secondInit)
+    {
+      //Problems make problems...
+      mfrc522.PCD_Init();
+      secondInit = false;
+    }
 
     if (cmd == "IsNewCardPresent")
     {
