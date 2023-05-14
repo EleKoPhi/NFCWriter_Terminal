@@ -1,33 +1,49 @@
 #include "Arduino.h"
 #include <MFRC522.h>
 
-#define SS_PIN          D2         
-#define RST_PIN         D4      
-#define YOUR_PAGE       0x5
+//HW PIN for MFRC522
+#define SS_PIN D8
+#define RST_PIN D3
 
-MFRC522 mfrc522(SS_PIN, RST_PIN); 
+// To be changed if a new reader is configured
+// 0x04 for EE-5
+// 0x05 für EE-1
+#define WORK_PAGE 0x06
 
-byte PSWBuff[] = {0xFF, 0xAB, 0xBA, 0xFF};
-byte pACK[] = {0xE, 0x5};
-byte WBuff[] = {0x00, 0x00, 0x00, 0x04};
 byte RBuff[18];
-uint8 Page = YOUR_PAGE;
+uint8 Page = WORK_PAGE;
+byte pACK[] = {0xE, 0x5};
+byte PSWBuff[] = {0xFF, 0xAB, 0xBA, 0xFF};
+byte WBuff[] = {0x00, 0x00, 0x00, 0x04};
 
-int ReadCredit()
+MFRC522 mfrc522(SS_PIN, RST_PIN);
+
+void setup()
+{
+  Serial.begin(115200);
+  Serial.setTimeout(100);
+  SPI.begin();
+  mfrc522.PCD_Init();
+  while (Serial.available())
+  {
+    Serial.read();
+  }
+}
+
+int ReadCredit(uint8 chippage)
 {
   byte buffer[18];
   byte byteCount;
   byteCount = sizeof(buffer);
-  int res = mfrc522.MIFARE_Read(Page, buffer, &byteCount);
-  //Serial.println(buffer[0]);
-  //Serial.println(buffer[1]);
-  //Serial.println(buffer[2]);
-  //Serial.println(buffer[3]);
-  if (res != 0 || ((buffer[0]+buffer[1]+buffer[2]+buffer[3])/4) != (buffer[0] & buffer[1] & buffer[2] & buffer[3]))
+
+  mfrc522.PCD_NTAG216_AUTH(&PSWBuff[0], pACK);
+  int res = mfrc522.MIFARE_Read(chippage, buffer, &byteCount);
+
+  if (res != 0 || ((buffer[0] + buffer[1] + buffer[2] + buffer[3]) / 4) != (buffer[0] & buffer[1] & buffer[2] & buffer[3]))
   {
     return -1;
   }
-  return (buffer[0]+buffer[1]+buffer[2]+buffer[3])/4; 
+  return (buffer[0] + buffer[1] + buffer[2] + buffer[3]) / 4;
 }
 
 String getID()
@@ -44,87 +60,84 @@ String getID()
   return String(code, DEC);
 }
 
-int WriteCredit(int newCredit_lokal)
+byte WriteCredit(int newCredit_lokal, uint8 chipPage)
 {
   byte WBuff[] = {newCredit_lokal, newCredit_lokal, newCredit_lokal, newCredit_lokal};
-  mfrc522.PCD_NTAG216_AUTH(&PSWBuff[0], pACK);
-  mfrc522.MIFARE_Ultralight_Write(Page, WBuff, 4); 
-  //Serial.println(newCredit_lokal);
-  return 1;
-}
 
-void setup()
-{
-  Serial.begin(9600);
-  SPI.begin();
-  mfrc522.PCD_Init();
-  while(Serial.available()){Serial.read();}
+  if (!mfrc522.PICC_IsNewCardPresent())
+    return 4;
+
+  if (!mfrc522.PICC_ReadCardSerial())
+    return 5;
+
+  mfrc522.PCD_NTAG216_AUTH(&PSWBuff[0], pACK);
+  return mfrc522.MIFARE_Ultralight_Write(chipPage, WBuff, 4);
 }
 
 void loop()
 {
 
-  String cmd =  Serial.readString();
-  Serial.println("Received: " + cmd);
+  String cmd = Serial.readString();
 
-  if (cmd == "IsNewCardPresent")
+  if (cmd == "ping")
   {
-    Serial.println(mfrc522.PICC_IsNewCardPresent());
-  }
-  else if (cmd == "getID")
-  {
-    Serial.println(getID());
-  }
-  else if (cmd == "ReadCredit")
-  {
-    Serial.println(ReadCredit());
-  }
-  else if (cmd == "WriteCredit")
-  {
-    Serial.println("Input:");
-    String Nr = Serial.readString();
-    Serial.println(WriteCredit(Nr.toInt()));
-  }
-  else if (cmd == "Reset")
-  {
-    while(!mfrc522.PICC_IsNewCardPresent()){}
+    Serial.println("pong");
+
+    cmd = Serial.readString();
+
+    if (cmd == "IsNewCardPresent")
+    {
+      Serial.println(mfrc522.PICC_IsNewCardPresent());
+    }
+    else if (cmd == "getID")
+    {
+      Serial.println(getID());
+    }
+    else if (cmd == "ReadCredit")
+    {
+      Serial.println(ReadCredit(Page));
+    }
+    else if (cmd == "GetCardInformation")
+    {
+      String ID = getID();
+      int Credit_1 = ReadCredit(Page);
+      Serial.println(ID + "_" + String(Credit_1) + "_" + String(Credit_1));
+    }
+    else if (cmd.indexOf("WriteCredit") != -1)
+    {
+      String no = cmd.substring(14);
+      String page = cmd.substring(0, 1);
+      byte result = WriteCredit(byte(no.toInt()), Page);
+
+      cmd += "_";
+      cmd += result;
+
+      Serial.println(cmd);
+    }
+    else if (cmd.indexOf("Reset") != -1)
+    {
+      String page = cmd.substring(0, 1);
+      byte result = WriteCredit(byte(0), Page);
+
+      cmd += "_";
+      cmd += result;
+
+      Serial.println(cmd);
+    }
+    else if (cmd == "Init")
+    {
+
+      while (!mfrc522.PICC_IsNewCardPresent())
+      {
+      }
       mfrc522.PICC_ReadCardSerial();
-      ReadCredit();
-      Serial.println("Reset");
-      
-
-      int flag = 0;
-
-      flag = mfrc522.MIFARE_Ultralight_Write(0xE5, PSWBuff, 4);
+      mfrc522.MIFARE_Ultralight_Write(0xE5, PSWBuff, 4);
       mfrc522.MIFARE_Ultralight_Write(0xE6, pACK, 4);
       mfrc522.MIFARE_Ultralight_Write(0xE3, WBuff, 4);
-
-      WriteCredit(0);
-
-      ReadCredit();
-
-      if (flag == 3)
-      {
-        delay(2000);
-        Serial.println("Err");
-      }
-
-      bool flagNow = true;
-      bool flagPast = false;
-
-      while (true)
-      {
-        flagPast = flagNow;
-        flagNow = mfrc522.PICC_IsNewCardPresent();
-        if (flagNow == flagPast)
-          break;
-        
-        WriteCredit(0);
-        Serial.println("Done!");
-      }
-  }
-  else
-  {
-    Serial.println("Unknown cmd");
+      byte WBuff[] = {0, 0, 0, 0};
+      mfrc522.PCD_NTAG216_AUTH(&PSWBuff[0], pACK);
+      mfrc522.MIFARE_Ultralight_Write(Page, WBuff, 4);
+      Serial.println("OK");
+    }
   }
 }
