@@ -2,8 +2,8 @@
 #include <MFRC522.h>
 
 //HW PIN for MFRC522
-#define SS_PIN D8
-#define RST_PIN D3
+#define SS_PIN D2
+#define RST_PIN D4
 
 // To be changed if a new reader is configured
 // 0x04 for EE-5
